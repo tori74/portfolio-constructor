@@ -140,8 +140,9 @@ h1{font-size:26px;font-weight:700;text-align:center;color:var(--gray-900);margin
     <div class="field">
       <label class="field-label">Ваше имя</label>
       <div class="input-wrap">
-        <input type="text" id="userName" placeholder="Введите Ваше имя">
+        <input type="text" id="userName" placeholder="Как к Вам обратиться в отчёте" maxlength="60" autocomplete="off">
       </div>
+      <div class="field-error" id="errName">Укажите имя — оно будет в Вашем PDF-отчёте</div>
     </div>
 
     <!-- Первоначальный капитал -->
@@ -153,19 +154,18 @@ h1{font-size:26px;font-weight:700;text-align:center;color:var(--gray-900);margin
       </div>
       <div class="field-hint">Сумма, которую Вы готовы вложить сейчас. Если нет стартового капитала — оставьте 0</div>
       <div class="field-example">Например: 100 000</div>
-      <div class="field-error" id="errCapital">Укажите хотя бы стартовый капитал или сумму ежемесячных пополнений</div>
     </div>
 
     <!-- Ежемесячные пополнения -->
     <div class="field">
       <label class="field-label">Ежемесячные пополнения</label>
       <div class="input-wrap">
-        <input type="text" id="monthlyContribution" placeholder="Введите сумму в рублях" inputmode="numeric">
+        <input type="text" id="monthlyContribution" placeholder="Введите сумму в рублях" inputmode="numeric" autocomplete="off">
         <span class="input-suffix">₽</span>
       </div>
       <div class="field-hint">Сколько планируете добавлять каждый месяц. Если не планируете — оставьте 0</div>
       <div class="field-example">Например: 15 000</div>
-      <div class="field-error" id="errMonthly">Укажите хотя бы стартовый капитал или сумму ежемесячных пополнений</div>
+      <div class="field-error" id="errCapitalOrMonthly" style="margin-top:-8px">Укажите хотя бы стартовый капитал или сумму ежемесячных пополнений</div>
     </div>
 
     <!-- Срок инвестирования -->
@@ -335,16 +335,47 @@ document.querySelectorAll('#initialCapital, #monthlyContribution').forEach(input
   input.addEventListener('input', function() {
     let raw = this.value.replace(/[^\d]/g, '');
     this.value = raw ? formatNum(raw) : '';
+    clearMoneyError();
     updateSubmitBtn();
   });
 });
+
+// Clear errors on edit
+document.getElementById('userName').addEventListener('input', () => {
+  document.getElementById('errName').style.display = 'none';
+  document.getElementById('userName').classList.remove('error');
+  updateSubmitBtn();
+});
+document.querySelectorAll('input[name="horizon"]').forEach(r => r.addEventListener('change', () => {
+  document.getElementById('errHorizon').style.display = 'none';
+  updateSubmitBtn();
+}));
+document.querySelectorAll('input[name="risk"]').forEach(r => r.addEventListener('change', () => {
+  document.getElementById('errRisk').style.display = 'none';
+  updateSubmitBtn();
+}));
+
+function clearMoneyError() {
+  document.getElementById('errCapitalOrMonthly').style.display = 'none';
+  document.getElementById('initialCapital').classList.remove('error');
+  document.getElementById('monthlyContribution').classList.remove('error');
+}
 
 // Consent checkbox
 const consentCb = document.getElementById('consentPD');
 consentCb.addEventListener('change', updateSubmitBtn);
 
+function isFormReady() {
+  const name = document.getElementById('userName').value.trim();
+  const cap = parseNum(document.getElementById('initialCapital').value);
+  const mon = parseNum(document.getElementById('monthlyContribution').value);
+  const horizon = document.querySelector('input[name="horizon"]:checked');
+  const risk = document.querySelector('input[name="risk"]:checked');
+  return name && (cap > 0 || mon > 0) && horizon && risk && consentCb.checked;
+}
+
 function updateSubmitBtn() {
-  document.getElementById('btnSubmit').disabled = !consentCb.checked;
+  document.getElementById('btnSubmit').disabled = !isFormReady();
 }
 
 // Quiz
@@ -408,9 +439,13 @@ document.getElementById('btnSubmit').addEventListener('click', async () => {
 
   let hasError = false;
 
+  if (!name) {
+    document.getElementById('errName').style.display = 'block';
+    document.getElementById('userName').classList.add('error');
+    hasError = true;
+  }
   if (cap === 0 && mon === 0) {
-    document.getElementById('errCapital').style.display = 'block';
-    document.getElementById('errMonthly').style.display = 'block';
+    document.getElementById('errCapitalOrMonthly').style.display = 'block';
     document.getElementById('initialCapital').classList.add('error');
     document.getElementById('monthlyContribution').classList.add('error');
     hasError = true;
@@ -423,7 +458,12 @@ document.getElementById('btnSubmit').addEventListener('click', async () => {
     document.getElementById('errRisk').style.display = 'block';
     hasError = true;
   }
-  if (hasError) return;
+  if (hasError) {
+    // Прокрутить к первой ошибке
+    const firstErr = document.querySelector('.field-error[style*="block"], .input-wrap input.error');
+    if (firstErr) firstErr.scrollIntoView({behavior: 'smooth', block: 'center'});
+    return;
+  }
 
   // Show loading
   document.getElementById('stateForm').classList.add('hidden');
@@ -467,15 +507,34 @@ document.getElementById('btnSubmit').addEventListener('click', async () => {
 });
 
 // Reset
+function resetForm() {
+  document.getElementById('userName').value = '';
+  document.getElementById('initialCapital').value = '';
+  document.getElementById('monthlyContribution').value = '';
+  document.querySelectorAll('input[name="horizon"]').forEach(r => r.checked = false);
+  document.querySelectorAll('input[name="risk"]').forEach(r => r.checked = false);
+  document.getElementById('isGovEmployee').checked = false;
+  document.getElementById('consentPD').checked = false;
+  document.querySelectorAll('.field-error').forEach(e => e.style.display = 'none');
+  document.querySelectorAll('.input-wrap input').forEach(i => i.classList.remove('error'));
+  // Quiz сбрасывать не надо — может пригодиться в сессии
+  updateSubmitBtn();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
 document.getElementById('btnReset').addEventListener('click', () => {
   document.getElementById('stateResult').classList.remove('active');
   document.getElementById('stateForm').classList.remove('hidden');
+  resetForm();
 });
 
 document.getElementById('btnRetry').addEventListener('click', () => {
   document.getElementById('stateError').classList.remove('active');
   document.getElementById('stateForm').classList.remove('hidden');
 });
+
+// Инициализация кнопки при загрузке
+updateSubmitBtn();
 </script>
 </body>
 </html>
